@@ -1295,14 +1295,14 @@ static int fg_get_batt_profile(struct fg_chip *chip)
 		return -ENXIO;
 	}
 
-#if !defined(CONFIG_SOMC_CHARGER_EXTENSION)
+// #if !defined(CONFIG_SOMC_CHARGER_EXTENSION)
 	profile_node = of_batterydata_get_best_profile(batt_node,
 				chip->batt_id_ohms / 1000, NULL);
-#endif
+/* #endif
 #if defined(CONFIG_SOMC_CHARGER_EXTENSION)
 	profile_node = fg_somc_battery_data_get_best_profile(batt_node,
 			chip->batt_id_ohms / 1000, chip->batt_aging_level);
-#endif
+#endif */
 	if (IS_ERR(profile_node))
 		return PTR_ERR(profile_node);
 
