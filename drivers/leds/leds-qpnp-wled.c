@@ -601,6 +601,45 @@ static int qpnp_wled_sync_reg_toggle(struct qpnp_wled *wled)
 	return 0;
 }
 
+/* set a full scale current in ua for wled
+ * THIS FUNCTION DOES NOT CALL qpnp_wled_sync_reg_toggle()
+ * IT MUST BE CALLED AFTER!
+ */
+static int qpnp_wled_set_fs_curr_ua_no_sync(struct qpnp_wled *wled, int curr)
+{
+	int i, rc;
+	u8 reg;
+
+	if (curr < QPNP_WLED_FS_CURR_MIN_UA)
+		curr = QPNP_WLED_FS_CURR_MIN_UA;
+	else if (curr > QPNP_WLED_FS_CURR_MAX_UA)
+		curr = QPNP_WLED_FS_CURR_MAX_UA;
+		
+	if (wled->calc_curr)
+		reg = (curr + (QPNP_WLED_FS_CURR_STEP_UA - 1)) /
+			QPNP_WLED_FS_CURR_STEP_UA;
+	else
+		reg = curr / QPNP_WLED_FS_CURR_STEP_UA;
+	
+	for (i = 0; i < wled->max_strings; i++) {
+		rc = qpnp_wled_masked_write_reg(wled,
+			        QPNP_WLED_FS_CURR_REG(wled->sink_base, i),
+			        QPNP_WLED_FS_CURR_MASK,
+			                        reg);
+		if (rc < 0)
+			return rc;
+	}
+
+	wled->fs_curr_ua = curr;
+
+	if (rc < 0) {
+		dev_err(&wled->pdev->dev, "Failed to toggle sync reg %d\n", rc);
+		return rc;
+	}
+
+	return 0;
+}
+
 /* set wled to a level of brightness */
 static int qpnp_wled_set_level(struct qpnp_wled *wled, int level)
 {
@@ -1313,9 +1352,25 @@ static void qpnp_wled_work(struct work_struct *work)
 		}
 		wled->prev_level = level_255;
 	} else if (level) {
-		rc = qpnp_wled_set_level(wled, level);
-		if (rc) {
-			dev_err(&wled->pdev->dev, "wled set level failed\n");
+		int curr, duty_cycle;
+
+		if (level > 16) {
+			/* Default current and duty-cycle behavior. */
+			curr = QPNP_WLED_FS_CURR_STEP_UA * 7;
+			duty_cycle = level;
+		} else {
+			/*
+			 * Use minimum current and overcome the 0.4% duty-cycle
+			 * limitation.
+			 */
+			curr = QPNP_WLED_FS_CURR_STEP_UA;
+			duty_cycle = 136 - 8 * (16 - level);
+		}
+
+		/* Sync current and duty-cycle changes at the same time. */
+		if ((rc = qpnp_wled_set_fs_curr_ua_no_sync(wled, curr)) ||
+		    (rc = qpnp_wled_set_level(wled, duty_cycle))) {
+			dev_err(&wled->pdev->dev, "wled set failed\n");
 			goto unlock_mutex;
 		}
 	}
