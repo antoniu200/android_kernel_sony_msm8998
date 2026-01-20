@@ -162,7 +162,7 @@ static bool get_dload_mode(void)
 	return dload_mode_enabled;
 }
 
-#if 0
+#if 1
 static void enable_emergency_dload_mode(void)
 {
 	int ret;
@@ -391,7 +391,7 @@ static void msm_restart_prepare(const char *cmd)
 						     restart_reason);
 				}
 			}
-#if 0
+#if 1
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
 #endif

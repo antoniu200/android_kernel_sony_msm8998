@@ -5628,7 +5628,7 @@ static void smblib_icl_change_work(struct work_struct *work)
 
 	power_supply_changed(chg->usb_main_psy);
 
-	smblib_dbg(chg, PR_INTERRUPT, "icl_settled=%d\n", settled_ua);
+	//smblib_dbg(chg, PR_INTERRUPT, "icl_settled=%d\n", settled_ua);
 }
 
 static void smblib_pl_enable_work(struct work_struct *work)

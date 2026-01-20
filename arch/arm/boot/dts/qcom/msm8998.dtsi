@@ -3067,6 +3067,11 @@
 			compatible = "qcom,msm-imem-diag-dload";
 			reg = <0xc8 200>;
 		};
+
+		emergency_download_mode@fe0 {
+			compatible = "qcom,msm-imem-emergency_download_mode";
+			reg = <0xfe0 12>;
+		};
 	};
 
 	cpu_pmu: cpu-pmu {
