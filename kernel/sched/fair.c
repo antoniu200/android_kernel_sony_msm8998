@@ -6652,6 +6652,13 @@ static int find_new_capacity(struct energy_env *eenv, int cpu_idx)
 	int idx, max_idx = sge->nr_cap_states - 1;
 	unsigned long util = group_max_util(eenv, cpu_idx);
 
+	/*
+	 * schedutil (get_next_freq() in cpufreq_schedutil.c) asks for 1.25
+	 * times the utilization, so the OPP it will really select is the
+	 * lowest one covering util * 1.25. Keep this in sync with it.
+	 */
+	util += util >> 2;
+
 	/* default is max_cap if we don't find a match */
 	eenv->cpu[cpu_idx].cap_idx = max_idx;
 	eenv->cpu[cpu_idx].cap = sge->cap_states[max_idx].cap;
@@ -7587,6 +7594,15 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 	int best_idle_cpu = -1;
 	int target_cpu = -1;
 	int cpu, i;
+	/*
+	 * Spread mode: instead of always taking the lowest-capacity CPU that
+	 * fits, remember the best candidate of EACH cluster and let the energy
+	 * model decide between them. Boosted tasks keep the old behaviour.
+	 */
+	bool spread = !boosted;
+	int grp_idle_cpu = -1;
+	int grp_cand[2] = { -1, -1 };
+	int ngrp = 0;
 
 	*backup_cpu = -1;
 
@@ -7685,6 +7701,12 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 				 * Return the first IDLE CPU we find.
 				 */
 				if (idle_cpu(i)) {
+					/* Spread mode: first idle CPU of this cluster only */
+					if (spread) {
+						if (grp_idle_cpu == -1)
+							grp_idle_cpu = i;
+						continue;
+					}
 					schedstat_inc(p, se.statistics.nr_wakeups_fbt_pref_idle);
 					schedstat_inc(this_rq(), eas_stats.fbt_pref_idle);
 
@@ -7829,7 +7851,52 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 			target_cpu = i;
 		}
 
+		if (spread) {
+			/* Best candidate of this cluster, then reset the per-cluster state */
+			int c;
+
+			if (prefer_idle)
+				c = grp_idle_cpu != -1 ? grp_idle_cpu :
+				    (target_cpu != -1 ? target_cpu : best_active_cpu);
+			else
+				c = target_cpu != -1 ? target_cpu : best_idle_cpu;
+
+			if (c != -1 && ngrp < 2)
+				grp_cand[ngrp++] = c;
+
+			grp_idle_cpu = -1;
+			target_cpu = -1;
+			best_active_cpu = -1;
+			best_idle_cpu = -1;
+			target_capacity = ULONG_MAX;
+			best_idle_min_cap_orig = ULONG_MAX;
+			target_max_spare_cap = 0;
+			target_idle_max_spare_cap = 0;
+			min_wake_util = ULONG_MAX;
+			best_active_util = ULONG_MAX;
+			best_idle_cstate = INT_MAX;
+		}
+
 	} while (sg = sg->next, sg != sd->groups);
+
+	if (spread) {
+		/*
+		 * First candidate: cluster of the start CPU (little), second:
+		 * the next cluster (big). select_energy_cpu_brute() compares
+		 * them with the energy model.
+		 */
+		target_cpu = grp_cand[0];
+		*backup_cpu = grp_cand[1];
+
+		trace_sched_find_best_target(p, prefer_idle, min_util, cpu,
+					     best_idle_cpu, best_active_cpu,
+					     target_cpu);
+
+		schedstat_inc(p, se.statistics.nr_wakeups_fbt_count);
+		schedstat_inc(this_rq(), eas_stats.fbt_count);
+
+		return target_cpu;
+	}
 
 	/*
 	 * For non latency sensitive tasks, cases B and C in the previous loop,
@@ -7940,8 +8007,11 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu, int sync
 		goto unlock;
 	}
 
-	/* Unconditionally prefer IDLE CPUs for boosted/prefer_idle tasks */
-	if ((boosted || prefer_idle) && idle_cpu(next_cpu)) {
+	/*
+	 * Unconditionally prefer IDLE CPUs for boosted tasks, and for
+	 * prefer_idle tasks when there is no second cluster to choose from.
+	 */
+	if ((boosted || (prefer_idle && backup_cpu < 0)) && idle_cpu(next_cpu)) {
 		schedstat_inc(p, se.statistics.nr_wakeups_secb_idle_bt);
 		schedstat_inc(this_rq(), eas_stats.secb_idle_bt);
 		target_cpu = next_cpu;
@@ -7949,7 +8019,8 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu, int sync
 	}
 
 	target_cpu = prev_cpu;
-	if (next_cpu != prev_cpu) {
+	if (next_cpu != prev_cpu ||
+	    (!boosted && backup_cpu >= 0 && backup_cpu != prev_cpu)) {
 		int delta = 0;
 		struct energy_env eenv = {
 			.p              = p,
@@ -7979,6 +8050,31 @@ static int select_energy_cpu_brute(struct task_struct *p, int prev_cpu, int sync
 			schedstat_inc(p, se.statistics.nr_wakeups_secb_insuff_cap);
 			schedstat_inc(this_rq(), eas_stats.secb_insuff_cap);
 			target_cpu = next_cpu;
+			/* Two clusters offered: take the cheaper one */
+			if (!boosted && backup_cpu >= 0) {
+				select_energy_cpu_idx(&eenv);
+				if (eenv.cpu[EAS_CPU_BKP].energy +
+				    (eenv.cpu[EAS_CPU_NXT].energy >> 6) <
+				    eenv.cpu[EAS_CPU_NXT].energy)
+					target_cpu = backup_cpu;
+			}
+			goto unlock;
+		}
+
+		/*
+		 * prefer_idle tasks: one candidate per cluster (an idle CPU
+		 * where there is one). Previous CPU is not considered, so the
+		 * task stays on an idle CPU, but the energy model chooses the
+		 * cluster; the little CPU wins unless big saves more than the
+		 * ~1.56% dead zone.
+		 */
+		if (!boosted && prefer_idle && backup_cpu >= 0) {
+			select_energy_cpu_idx(&eenv);
+			target_cpu = next_cpu;
+			if (eenv.cpu[EAS_CPU_BKP].energy +
+			    (eenv.cpu[EAS_CPU_NXT].energy >> 6) <
+			    eenv.cpu[EAS_CPU_NXT].energy)
+				target_cpu = backup_cpu;
 			goto unlock;
 		}
 

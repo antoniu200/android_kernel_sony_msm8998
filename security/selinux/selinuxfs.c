@@ -68,7 +68,7 @@ static int __init checkreqprot_setup(char *str)
 }
 __setup("checkreqprot=", checkreqprot_setup);
 
-static DEFINE_MUTEX(sel_mutex);
+DEFINE_MUTEX(sel_mutex);
 
 /* global data for booleans */
 static struct dentry *bool_dir;
@@ -673,7 +673,7 @@ static ssize_t sel_write_relabel(struct file *file, char *buf, size_t size);
 static ssize_t sel_write_user(struct file *file, char *buf, size_t size);
 static ssize_t sel_write_member(struct file *file, char *buf, size_t size);
 
-static ssize_t (*write_op[])(struct file *, char *, size_t) = {
+ssize_t (*write_op[])(struct file *, char *, size_t) = {
 	[SEL_ACCESS] = sel_write_access,
 	[SEL_CREATE] = sel_write_create,
 	[SEL_RELABEL] = sel_write_relabel,
@@ -703,7 +703,7 @@ static ssize_t selinux_transaction_write(struct file *file, const char __user *b
 	return rv;
 }
 
-static const struct file_operations transaction_ops = {
+const struct file_operations transaction_ops = {
 	.write		= selinux_transaction_write,
 	.read		= simple_transaction_read,
 	.release	= simple_transaction_release,
