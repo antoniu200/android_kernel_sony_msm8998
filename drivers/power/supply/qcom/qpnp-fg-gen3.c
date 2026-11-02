@@ -662,20 +662,6 @@ static int fg_get_charge_raw(struct fg_chip *chip, int *val)
 #define BATT_SOC_32BIT	GENMASK(31, 0)
 static int fg_get_charge_counter_shadow(struct fg_chip *chip, int *val)
 {
-	int rc, batt_soc;
-
-	rc = fg_get_sram_prop(chip, FG_SRAM_BATT_SOC, &batt_soc);
-	if (rc < 0) {
-		pr_err("Error in getting BATT_SOC, rc=%d\n", rc);
-		return rc;
-	}
-
-	*val = div_u64((u32)batt_soc * chip->cl.learned_cc_uah, BATT_SOC_32BIT);
-	return 0;
-}
-
-static int fg_get_charge_counter(struct fg_chip *chip, int *val)
-{
 	int rc, cc_soc;
 
 	rc = fg_get_sram_prop(chip, FG_SRAM_CC_SOC_SW, &cc_soc);
@@ -690,6 +676,20 @@ static int fg_get_charge_counter(struct fg_chip *chip, int *val)
 		*val = 1;
 
 #endif
+	return 0;
+}
+
+static int fg_get_charge_counter(struct fg_chip *chip, int *val)
+{
+	int rc, batt_soc;
+
+	rc = fg_get_sram_prop(chip, FG_SRAM_BATT_SOC, &batt_soc);
+	if (rc < 0) {
+		pr_err("Error in getting BATT_SOC, rc=%d\n", rc);
+		return rc;
+	}
+
+	*val = div_u64((u32)batt_soc * chip->cl.learned_cc_uah, BATT_SOC_32BIT);
 	return 0;
 }
 
