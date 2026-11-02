@@ -19,6 +19,9 @@
 
 extern short lowmem_adj[];
 extern int lowmem_minfree[];
+extern short lmk_guard_min_adj;
+extern int lmk_min_victim_kb;
+extern int lmk_min_victim_age_s;
 /* function in lowmemorykiller.c */
 int lowmem_min_param_size(void);
 int adjust_minadj(short *min_score_adj);

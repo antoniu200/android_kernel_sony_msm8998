@@ -33,9 +33,16 @@
 #include <linux/sysfs.h>
 #include <linux/debugfs.h>
 
+#include <linux/zram_lmk.h>
+
 #include "zram_drv.h"
 
 static DEFINE_IDR(zram_index_idr);
+
+#if IS_BUILTIN(CONFIG_ZRAM)
+/* zram0, for the low memory killer. Cleared (and an RCU grace period waited) before removal. */
+static struct zram *lmk_zram;
+#endif
 /* idr index must be protected */
 static DEFINE_MUTEX(zram_index_mutex);
 
@@ -1648,6 +1655,20 @@ static const struct attribute_group *zram_disk_attr_groups[] = {
  * Allocate and initialize new zram device. the function returns
  * '>= 0' device_id upon success, and negative value otherwise.
  */
+#if IS_BUILTIN(CONFIG_ZRAM)
+bool zram_lmk_get_usage(u64 *compr_bytes, u64 *stored_pages)
+{
+	struct zram *zram = READ_ONCE(lmk_zram);
+
+	if (!zram || !init_done(zram))
+		return false;
+
+	*compr_bytes = atomic64_read(&zram->stats.compr_data_size);
+	*stored_pages = atomic64_read(&zram->stats.pages_stored);
+	return true;
+}
+#endif
+
 static int zram_add(void)
 {
 	struct zram *zram;
@@ -1733,6 +1754,10 @@ static int zram_add(void)
 
 	zram_debugfs_register(zram);
 	pr_info("Added device: %s\n", zram->disk->disk_name);
+#if IS_BUILTIN(CONFIG_ZRAM)
+	if (device_id == 0)
+		WRITE_ONCE(lmk_zram, zram);
+#endif
 	return device_id;
 
 out_free_queue:
@@ -1761,6 +1786,13 @@ static int zram_remove(struct zram *zram)
 
 	zram->claim = true;
 	mutex_unlock(&bdev->bd_mutex);
+
+#if IS_BUILTIN(CONFIG_ZRAM)
+	if (READ_ONCE(lmk_zram) == zram) {
+		WRITE_ONCE(lmk_zram, NULL);
+		synchronize_rcu();
+	}
+#endif
 
 	zram_debugfs_unregister(zram);
 

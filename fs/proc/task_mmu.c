@@ -72,6 +72,12 @@ void task_mem(struct seq_file *m, struct mm_struct *mm)
 		ptes >> 10,
 		pmds >> 10,
 		swap << (PAGE_SHIFT-10));
+	// Support for RAM Compaction
+	seq_printf(m,
+		"RssAnon:\t%8lu kB\n"
+		"RssFile:\t%8lu kB\n",
+		get_mm_counter(mm, MM_ANONPAGES) << (PAGE_SHIFT-10),
+		get_mm_counter(mm, MM_FILEPAGES) << (PAGE_SHIFT-10));
 	hugetlb_report_usage(m, mm);
 }
 
@@ -1692,7 +1698,8 @@ static ssize_t reclaim_write(struct file *file, const char __user *buf,
 	reclaim_walk.mm = mm;
 	reclaim_walk.pmd_entry = reclaim_pte_range;
 
-	rp.nr_to_reclaim = ~0;
+	/* int field: ~0 would be -1, which the clamp in reclaim_pte_range() turns into 0 after one batch */
+	rp.nr_to_reclaim = INT_MAX;
 	rp.nr_reclaimed = 0;
 	reclaim_walk.private = &rp;
 

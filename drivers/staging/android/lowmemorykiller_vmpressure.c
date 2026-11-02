@@ -49,15 +49,15 @@ void balance_cache(void)
 	lrw = __lmk_task_first();
 
 	if (lrw) {
-		if (lrw->tsk->mm) {
-			cp.selected_tasksize = get_mm_rss(lrw->tsk->mm);
-		} else {
-			lowmem_print(3, "pid:%d no mem\n", lrw->tsk->pid);
-			lmk_inc_stats(LMK_ERROR);
-			goto unlock_out;
-		}
-
-		do_kill = kill_needed(lrw->key, mask, &cp);
+		/*
+		 * Same victim choice as the shrinker path: cached apps that
+		 * are too small or too young are skipped, and the largest
+		 * footprint among the highest oom_score_adj is taken.
+		 * Fills cp (including selected_tasksize and
+		 * selected_oom_score_adj).
+		 */
+		lrw = lmk_pick_victim(&cp, mask);
+		do_kill = lrw != NULL;
 
 		if (death_pending_len >= cp.dynamic_max_queue_len)
 			__lmk_death_pending_morgue();

@@ -276,6 +276,25 @@ static int vmpressure_file_min;
 module_param_named(vmpressure_file_min, vmpressure_file_min, int,
 		   S_IRUGO | S_IWUSR);
 
+/*
+ * Guards for killing cached apps. They apply to every candidate whose own
+ * oom_score_adj is >= guard_min_adj, whichever minfree level is active; a
+ * candidate below that (foreground, visible, perceptible, services, the
+ * previous app) is never skipped by them.
+ *
+ * min_victim_kb:    do not kill an app that would give back less RAM than this
+ *                   (0 = off). See lmk_task_footprint() in lowmemorykiller_tng.c.
+ * min_victim_age_s: do not kill a process that started less than this many
+ *                   seconds ago (0 = off).
+ */
+short lmk_guard_min_adj = 900;
+module_param_named(guard_min_adj, lmk_guard_min_adj, short, S_IRUGO | S_IWUSR);
+int lmk_min_victim_kb = 30 * 1024;
+module_param_named(min_victim_kb, lmk_min_victim_kb, int, S_IRUGO | S_IWUSR);
+int lmk_min_victim_age_s = 0;
+module_param_named(min_victim_age_s, lmk_min_victim_age_s, int,
+		   S_IRUGO | S_IWUSR);
+
 enum {
 	VMPRESSURE_NO_ADJUST = 0,
 	VMPRESSURE_ADJUST_ENCROACH,

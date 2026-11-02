@@ -60,6 +60,12 @@ enum {
 	 * specified at mount time and thus is implemented here.
 	 */
 	CGRP_CPUSET_CLONE_CHILDREN,
+
+	/* Control group has to be frozen. */
+	CGRP_FREEZE,
+
+	/* Cgroup is frozen. */
+	CGRP_FROZEN,
 };
 
 /* cgroup_root->flags */
@@ -217,8 +223,30 @@ struct css_set {
 	/* dead and being drained, ignore for migration */
 	bool dead;
 
+	/* number of tasks in this css_set, protected by css_set_lock */
+	int nr_tasks;
+
 	/* For RCU-protected deletion */
 	struct rcu_head rcu_head;
+};
+
+struct cgroup_freezer_state {
+	/* Should the cgroup and its descendants be frozen. */
+	bool freeze;
+
+	/* Should the cgroup actually be frozen? */
+	int e_freeze;
+
+	/* Fields below are protected by css_set_lock */
+
+	/* Number of frozen descendant cgroups */
+	int nr_frozen_descendants;
+
+	/*
+	 * Number of tasks, which are counted as frozen:
+	 * frozen, SIGSTOPped, and PTRACEd.
+	 */
+	int nr_frozen_tasks;
 };
 
 struct cgroup {
@@ -252,6 +280,13 @@ struct cgroup {
 	 * task in this cgroup or its subtree.
 	 */
 	int populated_cnt;
+
+	/*
+	 * The number of live and dying descendant cgroups. Protected by
+	 * css_set_lock. Needed by the cgroup v2 freezer.
+	 */
+	int nr_descendants;
+	int nr_dying_descendants;
 
 	struct kernfs_node *kn;		/* cgroup kernfs entry */
 	struct cgroup_file procs_file;	/* handle for "cgroup.procs" */
@@ -304,6 +339,9 @@ struct cgroup {
 
 	/* used to store eBPF programs */
 	struct cgroup_bpf bpf;
+
+	/* Used to store internal freezer state */
+	struct cgroup_freezer_state freezer;
 
 	/* ids of the ancestors at each level including self */
 	int ancestor_ids[];

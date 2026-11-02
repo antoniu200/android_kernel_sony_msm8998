@@ -39,6 +39,9 @@ void print_obituary(struct task_struct *doomed,
 		    gfp_t gfp_mask);
 
 void balance_cache(void);
+struct lmk_rb_watch;
+/* tree walk with the size/age guards; lmk_task_lock must be held */
+struct lmk_rb_watch *lmk_pick_victim(struct calculated_params *cp, gfp_t mask);
 ssize_t get_task_rss(struct task_struct *tsk);
 
 /* kernel does not have a task_trylock and
