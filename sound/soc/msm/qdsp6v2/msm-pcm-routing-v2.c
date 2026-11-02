@@ -3177,6 +3177,8 @@ static int msm_pcm_channel_mixer_put(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
 	u16 fe_id = 0;
+	struct msm_pcm_routing_fdai_data *fdai;
+	int ret = 0;
 
 	fe_id = ((struct soc_enum *)
 			kcontrol->private_value)->shift_l;
@@ -3189,6 +3191,27 @@ static int msm_pcm_channel_mixer_put(struct snd_kcontrol *kcontrol,
 	pr_debug("%s: %s FE %d\n", __func__,
 		channel_mixer[fe_id].enable ? "Enable" : "Disable",
 		fe_id);
+
+	/*
+	 * The channel mixer is normally sent to the DSP only when the capture
+	 * stream is registered (msm_pcm_routing_reg_phy_stream). If the stream
+	 * is already running, e.g. an in-call recording whose backends were
+	 * disconnected and reconnected by a route switch, the ADM sessions
+	 * were reopened without it. Send it again now that it is enabled.
+	 */
+	if (channel_mixer[fe_id].enable) {
+		mutex_lock(&routing_lock);
+		fdai = &fe_dai_map[fe_id][SESSION_TYPE_TX];
+		if (fdai->strm_id != INVALID_SESSION) {
+			ret = msm_pcm_routing_channel_mixer(fe_id,
+					fdai->perf_mode, fdai->strm_id,
+					SNDRV_PCM_STREAM_CAPTURE);
+			if (ret)
+				pr_err("%s: re-send channel mixer for FE %d failed %d\n",
+					__func__, fe_id, ret);
+		}
+		mutex_unlock(&routing_lock);
+	}
 	return 0;
 }
 
