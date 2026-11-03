@@ -68,6 +68,7 @@ struct vfsmount {
 	struct super_block *mnt_sb;	/* pointer to superblock */
 	int mnt_flags;
 	void *data;
+	u64 susfs_mnt_id_backup;
 };
 
 struct file; /* forward dec */

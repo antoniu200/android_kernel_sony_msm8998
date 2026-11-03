@@ -32,6 +32,7 @@ struct kstat {
 	struct timespec	ctime;
 	unsigned long	blksize;
 	unsigned long long	blocks;
+	u32		result_mask;
 };
 
 #endif

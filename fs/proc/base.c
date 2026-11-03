@@ -1,9 +1,10 @@
-/*
- *  linux/fs/proc/base.c
+/*  linux/fs/proc/base.c
+ *  proc base directory handling functions
  *
  *  Copyright (C) 1991, 1992 Linus Torvalds
- *
- *  proc base directory handling functions
+ *  NOTE: This file has been modified by Sony Mobile Communications Inc.
+ *  Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
+ *  and licensed under the license of the file.
  *
  *  1999, Al Viro. Rewritten. Now it covers the whole per-process part.
  *  Instead of using magical inumbers to determine the kind of object
@@ -11,7 +12,6 @@
  *  go into icache. We cache the reference to task_struct upon lookup too.
  *  Eventually it should become a filesystem in its own. We don't use the
  *  rest of procfs anymore.
- *
  *
  *  Changelog:
  *  17-Jan-2005
@@ -46,14 +46,9 @@
  *  Paul Mundt <paul.mundt@nokia.com>:
  *  Overall revision about smaps.
  */
-/*
- * NOTE: This file has been modified by Sony Mobile Communications Inc.
- * Modifications are Copyright (c) 2017 Sony Mobile Communications Inc,
- * and licensed under the license of the file.
- */
 
 #include <asm/uaccess.h>
-
+#include <linux/oom_score_notifier.h>
 #include <linux/errno.h>
 #include <linux/time.h>
 #include <linux/proc_fs.h>
@@ -93,7 +88,6 @@
 #include <linux/flex_array.h>
 #include <linux/posix-timers.h>
 #include <linux/cpufreq_times.h>
-#include <linux/oom_score_notifier.h>
 #ifdef CONFIG_HARDWALL
 #include <asm/hardwall.h>
 #endif
